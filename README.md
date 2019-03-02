@@ -1,4 +1,4 @@
 ## TickTick
 
-golang sdk for [ticktick](dida365.com)
+golang sdk for [ticktick](https://dida365.com)
 
