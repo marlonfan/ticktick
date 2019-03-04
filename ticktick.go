@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"net/http/cookiejar"
+	"net/url"
 
 	"github.com/imroc/req"
 )
@@ -15,27 +17,49 @@ type Client struct {
 	password   string
 	ctx        context.Context
 	user       User
-	cookie     *http.Cookie
+	cookies    []*http.Cookie
 }
 
 // NewClient 生成 ticktick Client
-func NewClient(username string, password string, cookie string) (Client, error) {
+func NewClient(username string, password string, cookies []*http.Cookie) (Client, error) {
 	c := Client{
 		httpClient: req.New(),
 		username:   username,
 		password:   password,
 	}
 
-	if cookie != "" {
-		c.cookie = parseCookie(cookie)[0]
-		return c, nil
+	c.httpClient.Client().Jar, _ = cookiejar.New(nil)
+
+	if cookies != nil && c.SetCookies(cookies) != nil {
+		return c, errors.New("set cookies error")
 	}
 
 	return c, c.init()
 }
 
 func (c *Client) init() error {
-	return c.RefreshCookie()
+	if c.cookies == nil || c.CheckLoginStatus() == false {
+		return c.RefreshCookie()
+	}
+	return nil
+}
+
+// SetCookies 主动设置已登录cookie
+func (c *Client) SetCookies(cookies []*http.Cookie) error {
+	c.cookies = cookies
+	website, err := url.Parse(TickTickWebSiteURL)
+	if err != nil {
+		return err
+	}
+
+	c.httpClient.Client().Jar.SetCookies(website, c.cookies)
+
+	api, err := url.Parse(TickTickAPIRootURL)
+	if err != nil {
+		return err
+	}
+	c.httpClient.Client().Jar.SetCookies(api, c.cookies)
+	return nil
 }
 
 // Context 获取context
@@ -72,19 +96,20 @@ func (c *Client) RefreshCookie() error {
 		return errors.New("Cookie error")
 	}
 
-	c.cookie = cookies[1]
+	c.SetCookies(cookies)
 	c.user = user
 
 	return nil
 }
 
+// Cookie 获取当前登录cookie
+func (c *Client) Cookie() []*http.Cookie {
+	return c.cookies
+}
+
 // CheckLoginStatus 检查当前登录状态
 func (c *Client) CheckLoginStatus() bool {
-	if c.cookie == nil {
-		return false
-	}
-
-	resp, err := c.httpClient.Get(TickTickUserInfoURL, c.cookie)
+	resp, err := c.httpClient.Get(TickTickUserInfoURL)
 	statusCode := resp.Response().StatusCode
 	defer resp.Response().Body.Close()
 
@@ -93,10 +118,4 @@ func (c *Client) CheckLoginStatus() bool {
 	}
 
 	return true
-}
-
-func parseCookie(cookies string) []*http.Cookie {
-	return (&http.Response{
-		Header: http.Header{"Set-Cookie": {cookies}},
-	}).Cookies()
 }
