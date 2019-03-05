@@ -21,3 +21,8 @@ func (c *Client) TaskList() {
 func (c *Client) TodayTaskList() {
 
 }
+
+// DeferredTaskList 延期的任务
+func (c *Client) DeferredTaskList() {
+
+}
